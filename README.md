@@ -2,7 +2,9 @@
 
 # SS14 Art Maker
 
-Преобразование изображений в цветной BBCode арт для Space Station 14 (и не только)I.
+Преобразование изображений в цветной BBCode арт для Space Station 14 (и не только).
+
+**Языки:** **Русский** | [English](README.en.md)
 
 ![UI Screenshot](docs/images/preview.png)
 
