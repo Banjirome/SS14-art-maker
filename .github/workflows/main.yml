@@ -1,0 +1,71 @@
+name: Release Windows Binary
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name (e.g. v0.1.0). Required for manual run to publish release.'
+        required: true
+        default: 'v0.0.0-dev'
+      prerelease:
+        description: 'Mark release as prerelease (manual only)'
+        required: false
+        default: 'true'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Go module tidy
+        shell: pwsh
+        run: go mod tidy
+
+      - name: Build (tag dnd) Windows amd64
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED='1'
+          go build -tags dnd -trimpath -ldflags "-s -w" -o art_maker.exe .
+          if (!(Test-Path art_maker.exe)) { Write-Error 'Binary not produced'; exit 1 }
+          Get-Item art_maker.exe | Format-List * | Out-String | Write-Host
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: art_maker-windows-amd64
+          path: art_maker.exe
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+        with:
+          files: |
+            art_maker.exe
+          generate_release_notes: true
+          # If manual dispatch, create (or reuse) tag provided in input; if tag push, let action infer tag from ref
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && '' || github.event.inputs.tag }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease || 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# Usage:
+# 1. Push a tag like v1.0.0 (git tag v1.0.0 && git push origin v1.0.0)
+# 2. The workflow builds art_maker.exe (with build tag dnd) and attaches it to the release.
+# Manual run: provide 'tag' input; the workflow will create a release with that tag (and mark prerelease if chosen).
+# 3. You can also trigger manually via the Actions tab (workflow_dispatch).
