@@ -39,7 +39,7 @@ jobs:
         shell: pwsh
         run: |
           $env:CGO_ENABLED='1'
-          go build -tags dnd -trimpath -ldflags "-s -w" -o art_maker.exe .
+          go build -tags dnd -trimpath -ldflags "-s -w -H=windowsgui" -o art_maker.exe .
           if (!(Test-Path art_maker.exe)) { Write-Error 'Binary not produced'; exit 1 }
           Get-Item art_maker.exe | Format-List * | Out-String | Write-Host
 
