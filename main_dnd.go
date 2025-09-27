@@ -142,10 +142,19 @@ func main() {
 body{font-family:Segoe UI,Arial,sans-serif;margin:0;padding:12px;background:#1e1e1e;color:#eee;}
 #drop{border:2px dashed #555;border-radius:12px;padding:30px;text-align:center;font-size:15px;cursor:pointer;}
 #drop.drag{border-color:#08f;background:#222;}
-#layout{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-top:14px;}
+#layout{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-top:14px;overflow:auto;}
 #leftCol{max-width:280px;}
 #preview{max-width:260px;max-height:260px;display:block;margin:14px auto 6px;border:1px solid #444;border-radius:8px;background:#000;}
-#artPreview{flex:1;min-width:260px;max-width:480px;background:#111;color:#ddd;border:1px solid #444;border-radius:8px;padding:8px;font-family:Consolas,monospace;font-size:11px;line-height:11px;white-space:pre;overflow:auto;}
+#artPreview{
+  display:inline-block;
+  width:max-content;
+  max-width:none;
+  height:auto;
+  max-height:none;
+  background:#111;color:#ddd;border:1px solid #444;border-radius:8px;
+  padding:8px;font-family:Consolas,monospace;font-size:11px;line-height:11px;
+  white-space:pre;overflow:auto;box-sizing:content-box;resize:both;
+}
 #out{width:100%;height:180px;background:#111;color:#ddd;border:1px solid #444;border-radius:6px;padding:8px;font-family:Consolas,monospace;font-size:11px;white-space:pre;}
 button{background:#0b62d6;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:14px;cursor:pointer;margin-right:8px;margin-top:6px;}
 button:hover{background:#0d74ff;}
@@ -164,17 +173,18 @@ span.cc{display:inline;}
 						<button id="copyBtn" disabled>Копировать</button>
 				</div>
 				<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-					<label style="font-size:12px">Макс размер (px): <span id="maxDimVal">100</span></label>
-					<input id="maxDim" type="range" min="20" max="400" value="100" />
+					<label style="font-size:12px">Макс размер (px): <span id="maxDimVal">40</span></label>
+					<input id="maxDim" type="range" min="20" max="40" value="21" />
 					<label style="font-size:12px">Символ блока:
 						<input id="charInput" type="text" value="██" maxlength="4" style="width:60px;margin-left:4px;" />
 					</label>
 				</div>
 		<label class="block">BBCode результат:</label>
 		<textarea id="out" placeholder="Результат..." readonly></textarea>
+		<small id="charCount" class="mono">Символов (с BBCode): 0</small>
 		<small id="status"></small>
 	</div>
-	<div style="flex:1;min-width:260px;">
+	<div style="flex:1 1 auto;min-width:260px;overflow:auto;align-self:flex-start;">
 		<label class="block">Превью:</label>
 		<div id="artPreview" aria-label="preview"></div>
 	</div>
@@ -192,17 +202,19 @@ const artPreview = document.getElementById('artPreview');
 const maxDimRange = document.getElementById('maxDim');
 const maxDimVal = document.getElementById('maxDimVal');
 const charInput = document.getElementById('charInput');
+const charCount = document.getElementById('charCount');
 let currentBase64 = null;
 
 function setStatus(t){ statusEl.textContent = t; }
+function updateCharCount(){ if(charCount){ const n = (out && out.value) ? out.value.length : 0; charCount.textContent = 'Символов (с BBCode): ' + n; } }
 
 function handleFile(f){
   if(!f) return;
   const reader = new FileReader();
   reader.onload = e => {
-    currentBase64 = e.target.result;
-    preview.src = currentBase64; preview.style.display='block';
-    genBtn.disabled = false; setStatus('Файл загружен');
+	currentBase64 = e.target.result;
+	preview.src = currentBase64; preview.style.display='block';
+	genBtn.disabled = false; setStatus('Файл загружен');
   };
   reader.readAsDataURL(f);
 }
@@ -215,6 +227,18 @@ drop.addEventListener('dragleave', e=>{ drop.classList.remove('drag'); });
 drop.addEventListener('drop', e=>{ e.preventDefault(); drop.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
 
 function escapeHtml(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function fitPreviewToContent(){
+  if(!artPreview) return;
+  // reset to natural size, then snap to content box size
+  artPreview.style.width = 'auto';
+  artPreview.style.height = 'auto';
+  requestAnimationFrame(()=>{
+	const w = artPreview.scrollWidth;
+	const h = artPreview.scrollHeight;
+	artPreview.style.width = w + 'px';
+	artPreview.style.height = h + 'px';
+  });
+}
 function renderArt(bb){
 	// Примитивный парсер: заменяем [color=#xxxxxx] на <span style="color:#xxxxxx"> и [/color] на </span>
 	let safe = escapeHtml(bb);
@@ -225,6 +249,7 @@ function renderArt(bb){
 	// Удаляем служебную строку ;size=... если есть
 	safe = safe.replace(/^;size=.*?%\r?\n/, '');
 	artPreview.innerHTML = safe;
+	fitPreviewToContent();
 }
 
 maxDimRange && maxDimRange.addEventListener('input',()=>{ maxDimVal.textContent = maxDimRange.value; });
@@ -236,12 +261,16 @@ genBtn.addEventListener('click', async ()=>{
 		let ch = (charInput && charInput.value) ? charInput.value : '██';
 		if(ch.length === 1) ch = ch.repeat(2); // для плотности
 		const txt = await convertImage(currentBase64, dim, ch);
-		out.value=txt; copyBtn.disabled=false; setStatus('Готово'); renderArt(txt);
+		out.value=txt; copyBtn.disabled=false; setStatus('Готово'); renderArt(txt); updateCharCount();
   } catch(e){ setStatus('Ошибка: '+e); }
   genBtn.disabled=false;
 });
 
 copyBtn.addEventListener('click',()=>{ out.select(); document.execCommand('copy'); setStatus('Скопировано'); });
+
+window.addEventListener('resize', fitPreviewToContent);
+
+updateCharCount();
 </script></body></html>`
 
 	w := webview.New(true)
