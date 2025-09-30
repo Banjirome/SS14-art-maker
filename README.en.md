@@ -13,6 +13,7 @@ Convert images into colorful BBCode art for Space Station 14 (and any BBCode tar
 ## ✨ Features
 
 - Drag & Drop or file picker (PNG / JPG / GIF – first frame only).
+- Ctrl + V to paste images from the clipboard.
 - Automatic downscale to selected max dimension (slider).
 - Colored BBCode output using `[color=#RRGGBB]` tags.
 - Live preview inside the window.

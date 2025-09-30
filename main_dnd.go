@@ -163,14 +163,15 @@ label.block{display:block;margin-top:10px;font-size:13px;font-weight:600;}
 .mono{font-family:Consolas,monospace;}
 span.cc{display:inline;}
 </style></head><body>
-<h2>Перетащите изображение</h2>
-<div id="drop">Drag & Drop или кликните для выбора</div>
+<h2>Перетащите изображение или вставьте (Ctrl+V)</h2>
+<div id="drop">Drag & Drop, клик для выбора, или Ctrl+V для вставки из буфера</div>
 <div id="layout">
 	<div id="leftCol">
 		<img id="preview" style="display:none"/>
 				<div>
 						<button id="genBtn" disabled>Генерировать</button>
 						<button id="copyBtn" disabled>Копировать</button>
+						<button id="pasteBtn">Вставить из буфера</button>
 				</div>
 				<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
 					<label style="font-size:12px">Макс размер (px): <span id="maxDimVal">40</span></label>
@@ -203,18 +204,25 @@ const maxDimRange = document.getElementById('maxDim');
 const maxDimVal = document.getElementById('maxDimVal');
 const charInput = document.getElementById('charInput');
 const charCount = document.getElementById('charCount');
+const pasteBtn = document.getElementById('pasteBtn');
 let currentBase64 = null;
 
 function setStatus(t){ statusEl.textContent = t; }
 function updateCharCount(){ if(charCount){ const n = (out && out.value) ? out.value.length : 0; charCount.textContent = 'Символов (с BBCode): ' + n; } }
 
+function setBase64(b64){
+	currentBase64 = b64;
+	preview.src = currentBase64;
+	preview.style.display='block';
+	genBtn.disabled = false;
+	setStatus('Изображение готово');
+}
+
 function handleFile(f){
   if(!f) return;
   const reader = new FileReader();
   reader.onload = e => {
-	currentBase64 = e.target.result;
-	preview.src = currentBase64; preview.style.display='block';
-	genBtn.disabled = false; setStatus('Файл загружен');
+	setBase64(e.target.result);
   };
   reader.readAsDataURL(f);
 }
@@ -225,6 +233,52 @@ fileInput.addEventListener('change', e=>handleFile(e.target.files[0]));
 drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag'); });
 drop.addEventListener('dragleave', e=>{ drop.classList.remove('drag'); });
 drop.addEventListener('drop', e=>{ e.preventDefault(); drop.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+
+// Обработка Ctrl+V
+window.addEventListener('paste', (e)=>{
+	try {
+		const cd = e.clipboardData;
+		if (cd && cd.items && cd.items.length) {
+			for (const it of cd.items) {
+				if (it.kind === 'file' && it.type && it.type.startsWith('image/')) {
+					const file = it.getAsFile();
+					if (file) { handleFile(file); e.preventDefault(); return; }
+				}
+			}
+		}
+		// Если в буфере data URL (текст)
+		const t = cd && cd.getData ? (cd.getData('text/plain')||'') : '';
+		if (t && t.startsWith('data:') && t.includes('base64,')) {
+			setBase64(t);
+			e.preventDefault();
+		}
+	} catch(err) { setStatus('Вставка: ' + err); }
+});
+
+// Кнопка "Вставить из буфера" — попытка через современный Clipboard API
+async function tryReadClipboardImage(){
+	if (!navigator.clipboard || !navigator.clipboard.read) {
+		setStatus('Клипборд API недоступен. Попробуйте Ctrl+V.');
+		return;
+	}
+	try {
+		const items = await navigator.clipboard.read();
+		for (const item of items) {
+			const types = item.types || [];
+			const imgType = types.find(t=>t.startsWith('image/'));
+			if (imgType) {
+				const blob = await item.getType(imgType);
+				handleFile(blob);
+				return;
+			}
+		}
+		setStatus('В буфере нет изображения');
+	} catch(err) {
+		setStatus('Не удалось прочитать буфер: ' + err);
+	}
+}
+
+pasteBtn && pasteBtn.addEventListener('click', tryReadClipboardImage);
 
 function escapeHtml(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 function fitPreviewToContent(){
